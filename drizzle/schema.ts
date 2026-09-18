@@ -1,17 +1,7 @@
 import { int, mysqlEnum, mysqlTable, text, timestamp, varchar } from "drizzle-orm/mysql-core";
 
-/**
- * Core user table backing auth flow.
- * Extend this file with additional tables as your product grows.
- * Columns use camelCase to match both database fields and generated types.
- */
 export const users = mysqlTable("users", {
-  /**
-   * Surrogate primary key. Auto-incremented numeric value managed by the database.
-   * Use this for relations between tables.
-   */
   id: int("id").autoincrement().primaryKey(),
-  /** Manus OAuth identifier (openId) returned from the OAuth callback. Unique per user. */
   openId: varchar("openId", { length: 64 }).notNull().unique(),
   name: text("name"),
   email: varchar("email", { length: 320 }),
@@ -22,7 +12,28 @@ export const users = mysqlTable("users", {
   lastSignedIn: timestamp("lastSignedIn").defaultNow().notNull(),
 });
 
+export const interviewSessions = mysqlTable("interview_sessions", {
+  id: int("id").autoincrement().primaryKey(),
+  userId: int("userId"),
+  title: varchar("title", { length: 160 }).notNull(),
+  mode: varchar("mode", { length: 80 }).notNull(),
+  level: varchar("level", { length: 40 }).notNull(),
+  score: int("score"),
+  durationSeconds: int("durationSeconds"),
+  status: mysqlEnum("status", ["active", "completed", "abandoned"]).default("active").notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  completedAt: timestamp("completedAt"),
+});
+
+export const interviewMessages = mysqlTable("interview_messages", {
+  id: int("id").autoincrement().primaryKey(),
+  sessionId: int("sessionId").notNull(),
+  role: mysqlEnum("role", ["assistant", "user"]).notNull(),
+  content: text("content").notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
 export type User = typeof users.$inferSelect;
 export type InsertUser = typeof users.$inferInsert;
-
-// TODO: Add your tables here
+export type InterviewSession = typeof interviewSessions.$inferSelect;
+export type InterviewMessage = typeof interviewMessages.$inferSelect;
