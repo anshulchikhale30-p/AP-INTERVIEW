@@ -52,6 +52,7 @@ export default function Home() {
   const speakingRef = useRef(false);
   const respondingRef = useRef(false);
   const startedRef = useRef(false);
+  const noSpeechTimerRef = useRef<number | null>(null);
   const [started, setStarted] = useState(false);
   const [listening, setListening] = useState(false);
   const [speaking, setSpeaking] = useState(false);
@@ -79,6 +80,13 @@ export default function Home() {
     };
     window.speechSynthesis.speak(utterance);
   }, [muted, started]);
+
+  const clearNoSpeechTimer = useCallback(() => {
+    if (noSpeechTimerRef.current !== null) {
+      window.clearTimeout(noSpeechTimerRef.current);
+      noSpeechTimerRef.current = null;
+    }
+  }, []);
 
   const respond = useCallback(async (text: string) => {
     const clean = text.trim();
@@ -123,10 +131,24 @@ export default function Home() {
     recognition.lang = "en-US";
     recognition.interimResults = true;
     recognition.continuous = false;
-    recognition.onstart = () => setListening(true);
+    recognition.onstart = () => {
+      setListening(true);
+      clearNoSpeechTimer();
+      noSpeechTimerRef.current = window.setTimeout(() => {
+        if (recognitionRef.current !== recognition || respondingRef.current || speakingRef.current) return;
+        shouldListenRef.current = false;
+        recognition.stop();
+        setListening(false);
+        setInterim("");
+        const nudge = "I didn’t hear anything. Take your time and answer when you’re ready.";
+        setMessages((current) => [...current, { role: "assistant", content: nudge }]);
+        speak(nudge, true);
+      }, 5000);
+    };
     recognition.onresult = (event: any) => {
       let finalText = "";
       let interimText = "";
+      clearNoSpeechTimer();
       for (let index = event.resultIndex; index < event.results.length; index += 1) {
         const transcript = event.results[index][0].transcript;
         if (event.results[index].isFinal) finalText += transcript;
@@ -139,6 +161,7 @@ export default function Home() {
       }
     };
     recognition.onerror = (event: any) => {
+      clearNoSpeechTimer();
       recognitionRef.current = null;
       setListening(false);
       if (event?.error === "no-speech" || event?.error === "aborted") {
@@ -149,6 +172,7 @@ export default function Home() {
       toast.error("I couldn’t hear that. Please try again.");
     };
     recognition.onend = () => {
+      clearNoSpeechTimer();
       recognitionRef.current = null;
       setListening(false);
       setInterim("");
@@ -158,7 +182,7 @@ export default function Home() {
     };
     recognitionRef.current = recognition;
     recognition.start();
-  }, [respond]);
+  }, [clearNoSpeechTimer, respond, speak]);
 
   const startSession = () => {
     startedRef.current = true;
@@ -168,6 +192,7 @@ export default function Home() {
   };
 
   const stopSession = () => {
+    clearNoSpeechTimer();
     startedRef.current = false;
     shouldListenRef.current = false;
     recognitionRef.current?.stop();
