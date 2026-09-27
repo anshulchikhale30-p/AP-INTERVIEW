@@ -30,6 +30,14 @@ const historyItemSchema = z.object({
   score: z.number().int().min(0).max(100),
 });
 
+const rubricDimensionSchema = z.enum([
+  "clarify",
+  "approach",
+  "data-structure",
+  "complexity",
+  "edge-cases",
+]);
+
 const answerInputSchema = z.object({
   questionId: z.string().min(1),
   questionIndex: z.number().int().min(0),
@@ -44,6 +52,18 @@ const answerInputSchema = z.object({
     .max(12)
     .default([]),
   history: z.array(historyItemSchema).max(10).default([]),
+  // Rubric steps the candidate never covered, measured live from the
+  // transcript. Drives the targeted follow-up.
+  missingRubric: z.array(rubricDimensionSchema).max(5).default([]),
+  // Delivery telemetry derived from word-level timestamps.
+  delivery: z
+    .object({
+      wordsPerMinute: z.number().min(0).max(400),
+      fillerRate: z.number().min(0).max(100),
+      longestPauseMs: z.number().min(0).max(120_000),
+    })
+    .nullable()
+    .default(null),
 });
 
 const evaluationSchema: JsonSchema = {
@@ -140,17 +160,78 @@ function renderTranscript(
     .join("\n");
 }
 
+/**
+ * A spoken technical screen is graded on two independent axes: whether the
+ * algorithm was right, and whether the candidate actually communicated it.
+ * The rubric is the second axis, measured from the live transcript.
+ */
+const RUBRIC_LABELS: Record<
+  z.infer<typeof rubricDimensionSchema>,
+  { label: string; ask: string }
+> = {
+  clarify: {
+    label: "Clarify",
+    ask: "confirms the problem or asks a clarifying question before solving",
+  },
+  approach: {
+    label: "Approach",
+    ask: "states a high-level plan before reaching for an implementation",
+  },
+  "data-structure": {
+    label: "Data structure",
+    ask: "names a concrete data structure and justifies the choice",
+  },
+  complexity: {
+    label: "Complexity",
+    ask: "states the time and space cost out loud",
+  },
+  "edge-cases": {
+    label: "Edge cases",
+    ask: "acknowledges edge cases, assumptions or trade-offs",
+  },
+};
+
+const DELIVERY_NOTES: { max: number; note: string }[] = [
+  { max: 110, note: "spoke very slowly, which reads as uncertainty" },
+  { max: 190, note: "spoke faster than 190 wpm, which can read as nerves" },
+];
+
 function makeFeedbackPrompt(input: z.infer<typeof answerInputSchema>): string {
   const question = questionBank.find(q => q.id === input.questionId);
   const details = question
     ? `${question.prompt}\n\nGrading checklist (use internally, never quote verbatim):\n- ${question.keyPoints.join("\n- ")}`
     : "Question not found in the bank; grade generously on clarity and correctness.";
 
+  const structureNotes: string[] = [];
+  if (input.missingRubric.length > 0) {
+    const missing = input.missingRubric
+      .map(id => RUBRIC_LABELS[id].label)
+      .join(", ");
+    structureNotes.push(
+      `The candidate never covered these rubric steps in this answer: ${missing}. Penalise structure, not just correctness, and make your feedback point at the first missing step.`
+    );
+  } else if (input.answer.trim().length > 40) {
+    structureNotes.push(
+      "The candidate covered every rubric step. Reinforce that clear structure in your feedback."
+    );
+  }
+
+  if (input.delivery) {
+    const { wordsPerMinute, fillerRate, longestPauseMs } = input.delivery;
+    const pacing = DELIVERY_NOTES.find(entry => wordsPerMinute <= entry.max);
+    structureNotes.push(
+      `Delivery telemetry from word-level timestamps: ${wordsPerMinute} wpm, ${fillerRate} fillers per 100 words, longest pause ${(longestPauseMs / 1000).toFixed(1)}s${pacing ? ` (${pacing.note})` : ""}. Use this only if the answer's communication quality is genuinely affected; do not mention raw numbers.`
+    );
+  }
+
   return [
     `Question ${input.questionIndex + 1} of ${input.count} [${question?.topic ?? "General"}, ${input.difficulty}]`,
     details,
     `Recent conversation:\n${renderTranscript(input.transcript) || "No previous turns."}`,
     `Candidate's answer${input.skipped ? " (candidate skipped this question)" : ""}:\n${input.answer}`,
+    structureNotes.length > 0
+      ? `Structure analysis:\n- ${structureNotes.join("\n- ")}`
+      : "Structure analysis: not available (typed or skipped answer).",
     "Grade this verbal answer against the checklist. Score 0-100. Give one short, specific piece of feedback and, if the answer was incomplete, one concrete hint. Never reveal the checklist.",
   ].join("\n\n");
 }

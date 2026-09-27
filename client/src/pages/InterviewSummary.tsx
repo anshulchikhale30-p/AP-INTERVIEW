@@ -3,10 +3,16 @@ import type {
   InterviewQuestion,
   InterviewSummary,
 } from "@shared/types";
+import type {
+  DeliveryMetrics,
+  RubricCoverage,
+} from "@shared/rubric";
+import { RUBRIC_DIMENSIONS } from "@shared/rubric";
 import {
   ArrowLeft,
   Check,
   CircleSlash,
+  Gauge,
   Minus,
   RotateCcw,
   Sparkles,
@@ -16,6 +22,10 @@ import {
 export type QuestionResult = {
   question: InterviewQuestion;
   evaluation: InterviewAnswerEvaluation;
+  /** How much of the verbal rubric this answer actually covered. */
+  coverage: RubricCoverage | null;
+  delivery: DeliveryMetrics | null;
+  transcript: string;
 };
 
 const VERDICT_COLORS: Record<
@@ -51,6 +61,107 @@ const DIFFICULTY_LABEL: Record<InterviewQuestion["difficulty"], string> = {
   medium: "medium",
   hard: "hard",
 };
+
+/**
+ * The report card a correctness score cannot produce. Correctness tells you
+ * whether the answer was right; this tells you whether the person would have
+ * communicated it convincingly in a real screen, and which habit is costing
+ * them the most across the whole interview.
+ */
+function DeliveryReport({ results }: { results: QuestionResult[] }) {
+  const spoken = results.filter(result => result.delivery !== null);
+  if (spoken.length === 0) return null;
+
+  const totalWords = spoken.reduce(
+    (sum, result) => sum + (result.delivery?.wordCount ?? 0),
+    0
+  );
+  const totalFillers = spoken.reduce(
+    (sum, result) => sum + (result.delivery?.fillerCount ?? 0),
+    0
+  );
+  const avgWpm = Math.round(
+    spoken.reduce((sum, result) => sum + (result.delivery?.wordsPerMinute ?? 0), 0) /
+      spoken.length
+  );
+  const fillerRate = totalWords
+    ? Number(((totalFillers / totalWords) * 100).toFixed(1))
+    : 0;
+  const longestPause = Math.max(
+    ...spoken.map(result => result.delivery?.longestPauseMs ?? 0)
+  );
+
+  // Which rubric steps did this candidate habitually skip? This is the single
+  // most actionable line in the whole report.
+  const missedCounts = new Map<string, { label: string; count: number }>();
+  for (const result of results) {
+    for (const id of result.coverage?.missing ?? []) {
+      const entry = missedCounts.get(id) ?? {
+        label:
+          RUBRIC_DIMENSIONS.find(dimension => dimension.id === id)?.label ?? id,
+        count: 0,
+      };
+      entry.count += 1;
+      missedCounts.set(id, entry);
+    }
+  }
+  const habit = Array.from(missedCounts.values()).sort(
+    (a, b) => b.count - a.count
+  )[0];
+
+  const stats = [
+    { label: "spoken", value: `${totalWords}w` },
+    { label: "pace", value: `${avgWpm} wpm` },
+    { label: "fillers", value: `${totalFillers} (${fillerRate}/100w)` },
+    { label: "longest pause", value: `${(longestPause / 1000).toFixed(1)}s` },
+  ];
+
+  return (
+    <div className="mt-4 w-full rounded-2xl border border-[#82a9ff]/20 bg-[#82a9ff]/[0.04] p-5 text-left sm:p-6">
+      <div className="flex items-center gap-2 text-[10px] uppercase tracking-[0.18em] text-[#82a9ff]">
+        <Gauge className="h-3.5 w-3.5" /> Delivery
+      </div>
+
+      <dl className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
+        {stats.map(stat => (
+          <div key={stat.label}>
+            <dt className="text-[10px] uppercase tracking-[0.12em] text-white/35">
+              {stat.label}
+            </dt>
+            <dd className="mt-0.5 font-mono text-[13px] text-white/85">
+              {stat.value}
+            </dd>
+          </div>
+        ))}
+      </dl>
+
+      {habit && habit.count > 0 && (
+        <p className="mt-4 rounded-xl border border-white/[0.07] bg-white/[0.03] px-4 py-3 text-[12px] leading-5 text-white/70">
+          <span className="font-semibold text-white/90">
+            Your biggest habit: {habit.label}.
+          </span>{" "}
+          You left it out of {habit.count} of {results.length} answers. Interviewers
+          score it every time, even when the algorithm is right.
+        </p>
+      )}
+
+      <ul className="mt-3 flex flex-col gap-1.5">
+        {spoken
+          .flatMap(result => result.delivery?.notes ?? [])
+          .slice(0, 3)
+          .map((note, index) => (
+            <li
+              key={index}
+              className="flex gap-2 text-[12px] leading-5 text-white/55"
+            >
+              <Minus className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[#82a9ff]" />{" "}
+              {note}
+            </li>
+          ))}
+      </ul>
+    </div>
+  );
+}
 
 export default function InterviewSummary({
   results,
@@ -189,6 +300,8 @@ export default function InterviewSummary({
           </ul>
         </div>
       </div>
+
+      <DeliveryReport results={results} />
 
       <p className="mt-6 max-w-[500px] text-center text-[13px] italic leading-6 text-white/55">
         “{summary.closing}”

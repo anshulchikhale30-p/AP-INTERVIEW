@@ -30,6 +30,8 @@ type Options = {
   onTurnEnd?: (turn: MergedTurn) => void;
   onError?: (message: string) => void;
   onIdle?: (turn: MergedTurn) => void;
+  /** RMS of the newest audio chunk, 0..1. */
+  onLevel?: (rms: number) => void;
 };
 
 const EMPTY_COVERAGE = scoreRubric("");
@@ -100,6 +102,7 @@ export function useVoiceStream(options: Options) {
         getToken: () => optionsRef.current.getToken(),
         agentContext,
         onStatusChange: setStatus,
+        onLevel: rms => optionsRef.current.onLevel?.(rms),
         onError: message => optionsRef.current.onError?.(message),
         onTurn: event => {
           // AssemblyAI transcripts are immutable, so the last word is the

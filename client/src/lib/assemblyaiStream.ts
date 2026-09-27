@@ -44,6 +44,18 @@ export type StreamStatus =
   | "finishing"
   | "error";
 
+/** Root-mean-square of a PCM16 frame, normalized to 0..1. */
+function rms(frame: ArrayBuffer): number {
+  const samples = new Int16Array(frame);
+  if (samples.length === 0) return 0;
+  let sum = 0;
+  for (let index = 0; index < samples.length; index += 1) {
+    const value = samples[index]! / 0x8000;
+    sum += value * value;
+  }
+  return Math.sqrt(sum / samples.length);
+}
+
 export type TurnEvent = {
   transcript: string;
   words: TimedWord[];
@@ -61,6 +73,8 @@ type StartOptions = {
   onClose?: () => void;
   onError: (message: string) => void;
   onStatusChange?: (status: StreamStatus) => void;
+  /** RMS of the latest audio chunk, 0..1, for driving a real waveform. */
+  onLevel?: (rms: number) => void;
 };
 
 /**
@@ -124,9 +138,11 @@ export class AssemblyAiStream {
         processorOptions: { targetRate: SAMPLE_RATE, chunkMs: CHUNK_MS },
       });
       this.node.port.onmessage = event => {
+        const frame = event.data as ArrayBuffer;
         if (this.socket?.readyState === WebSocket.OPEN) {
-          this.socket.send(event.data as ArrayBuffer);
+          this.socket.send(frame);
         }
+        options.onLevel?.(rms(frame));
       };
       this.source.connect(this.node);
     } catch (error) {

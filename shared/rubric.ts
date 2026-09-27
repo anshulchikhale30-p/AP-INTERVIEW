@@ -319,19 +319,28 @@ export function analyzeDelivery(words: TimedWord[]): DeliveryMetrics {
     (wordCount / durationMs) * 60_000
   );
 
-  // Count fillers on a single padded string so multi-word fillers
-  // ("you know") are only counted once per occurrence.
   const spoken = normalizeSpeech(words.map(word => word.text).join(" "));
-  const padded = ` ${spoken} `;
+
+  // Match fillers as token n-grams rather than substrings: adjacent repeats
+  // ("um, um, so…") must each count, and multi-word fillers ("you know") must
+  // only count once per occurrence.
+  const tokens = spoken.split(" ").filter(Boolean);
 
   const counts = new Map<string, number>();
   for (const filler of FILLER_WORDS) {
-    const needle = ` ${normalizeSpeech(filler)} `;
+    const needle = normalizeSpeech(filler).split(" ").filter(Boolean);
+    if (needle.length === 0) continue;
+
     let count = 0;
-    let index = padded.indexOf(needle);
-    while (index !== -1) {
-      count += 1;
-      index = padded.indexOf(needle, index + needle.length);
+    for (let start = 0; start + needle.length <= tokens.length; start += 1) {
+      let matched = true;
+      for (let offset = 0; offset < needle.length; offset += 1) {
+        if (tokens[start + offset] !== needle[offset]) {
+          matched = false;
+          break;
+        }
+      }
+      if (matched) count += 1;
     }
     if (count > 0) counts.set(filler, count);
   }

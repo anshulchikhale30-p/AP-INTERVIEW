@@ -86,10 +86,13 @@ function Section({
 export default function InterviewSetup({
   defaultSettings,
   loading,
+  voiceReady,
   onStart,
 }: {
   defaultSettings: InterviewSettings;
   loading: boolean;
+  /** null while probing, then whether AssemblyAI streaming is reachable. */
+  voiceReady: boolean | null;
   onStart: (settings: InterviewSettings) => void;
 }) {
   const [topics, setTopics] = useState<string[]>(defaultSettings.topics);
@@ -121,8 +124,8 @@ export default function InterviewSetup({
       </h1>
       <p className="mt-4 max-w-[430px] text-center text-[13px] leading-6 text-white/40">
         A voice interviewer reads you algorithm and data-structure questions,
-        grades your reasoning out loud, and keeps the interview moving. No code
-        editor — just think and speak.
+        grades your reasoning out loud, and coaches your delivery while you talk.
+        No code editor — just think and speak.
       </p>
 
       <div className="mt-9 flex w-full flex-col gap-4 sm:gap-5">
@@ -194,9 +197,17 @@ export default function InterviewSetup({
         )}
         {loading ? "Booking the interviewer…" : "Start voice interview"}
       </button>
-      <p className="mt-3 text-[11px] text-white/30">
-        Mic input works best in Chrome or Edge. Wear headphones if you can.
-      </p>
+      <div className="mt-3 flex flex-col items-center gap-1.5">
+        <p className="text-[11px] text-white/30">
+          Works in Chrome, Edge, Firefox and Safari. Headphones recommended.
+        </p>
+        {voiceReady === false && (
+          <p className="max-w-[420px] text-center text-[11px] leading-5 text-[#ffad9a]/80">
+            Real-time voice is unavailable right now, so you can only type
+            answers. The server needs an AssemblyAI API key.
+          </p>
+        )}
+      </div>
     </section>
   );
 }
