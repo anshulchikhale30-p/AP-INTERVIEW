@@ -19,7 +19,12 @@ export type FileContent = {
   type: "file_url";
   file_url: {
     url: string;
-    mime_type?: "audio/mpeg" | "audio/wav" | "application/pdf" | "audio/mp4" | "video/mp4" ;
+    mime_type?:
+      | "audio/mpeg"
+      | "audio/wav"
+      | "application/pdf"
+      | "audio/mp4"
+      | "video/mp4";
   };
 };
 
@@ -212,14 +217,61 @@ const normalizeToolChoice = (
   return toolChoice;
 };
 
-const resolveApiUrl = () =>
-  ENV.forgeApiUrl && ENV.forgeApiUrl.trim().length > 0
-    ? `${ENV.forgeApiUrl.replace(/\/$/, "")}/v1/chat/completions`
-    : "https://forge.manus.im/v1/chat/completions";
+export type LLMConfig = {
+  baseUrl: string;
+  apiKey: string;
+  model: string;
+};
+
+const NVIDIA_BASE_URL = "https://integrate.api.nvidia.com";
+const DEFAULT_FORGE_URL = "https://forge.manus.im";
+const NVIDIA_MODEL = "nvidia/nemotron-3-ultra-550b-a55b";
+
+/**
+ * Resolve which OpenAI-compatible backend to talk to. Priority:
+ *   1. NVIDIA build API (key starts with `nvapi-`) -> Nemotron 3 Ultra.
+ *   2. Generic LLM_API_URL/LLM_API_KEY override.
+ *   3. Built-in Forge endpoint (BUILT_IN_FORGE_API_URL/_KEY).
+ */
+export function getLLMConfig(): LLMConfig {
+  const nvidiaKey = ENV.nvidiaApiKey.trim();
+  if (nvidiaKey && nvidiaKey.startsWith("nvapi-")) {
+    return {
+      baseUrl: NVIDIA_BASE_URL,
+      apiKey: nvidiaKey,
+      model: NVIDIA_MODEL,
+    };
+  }
+
+  if (ENV.llmApiUrl.trim() && ENV.llmApiKey.trim()) {
+    return {
+      baseUrl: ENV.llmApiUrl.replace(/\/+$/, ""),
+      apiKey: ENV.llmApiKey.trim(),
+      model: ENV.llmModel.trim(),
+    };
+  }
+
+  return {
+    baseUrl:
+      ENV.forgeApiUrl.trim().length > 0
+        ? ENV.forgeApiUrl.replace(/\/+$/, "")
+        : DEFAULT_FORGE_URL,
+    apiKey: ENV.forgeApiKey,
+    model: "",
+  };
+}
+
+const resolveApiUrl = () => {
+  const { baseUrl } = getLLMConfig();
+  return `${baseUrl}/v1/chat/completions`;
+};
 
 const assertApiKey = () => {
-  if (!ENV.forgeApiKey) {
-    throw new Error("OPENAI_API_KEY is not configured");
+  const { apiKey } = getLLMConfig();
+  if (!apiKey) {
+    throw new Error(
+      "No LLM API key configured (set NVIDIA_API_KEY, LLM_API_KEY, or BUILT_IN_FORGE_API_KEY)"
+    );
   }
 };
 
@@ -312,9 +364,7 @@ const fetchWithBackoff = async (
         return response;
       }
 
-      const retryAfterMs = parseRetryAfter(
-        response.headers.get("retry-after")
-      );
+      const retryAfterMs = parseRetryAfter(response.headers.get("retry-after"));
       try {
         await response.body?.cancel();
       } catch {
@@ -341,6 +391,7 @@ const fetchWithBackoff = async (
 
 export async function invokeLLM(params: InvokeParams): Promise<InvokeResult> {
   assertApiKey();
+  const config = getLLMConfig();
 
   const {
     messages,
@@ -358,12 +409,15 @@ export async function invokeLLM(params: InvokeParams): Promise<InvokeResult> {
     max_tokens,
   } = params;
 
+  const isNvidia = config.apiKey.startsWith("nvapi-");
+
   const payload: Record<string, unknown> = {
     messages: messages.map(normalizeMessage),
   };
 
-  if (model) {
-    payload.model = model;
+  const resolvedModel = model ?? config.model;
+  if (resolvedModel) {
+    payload.model = resolvedModel;
   }
 
   if (tools && tools.length > 0) {
@@ -389,6 +443,11 @@ export async function invokeLLM(params: InvokeParams): Promise<InvokeResult> {
   if (reasoning) {
     payload.reasoning = reasoning;
   }
+  // Nemotron 3 Ultra is a reasoning model; disable chain-of-thought by default
+  // so interview grading stays fast and answers land in `content`.
+  if (isNvidia && !thinking && !reasoning) {
+    payload.chat_template_kwargs = { enable_thinking: false };
+  }
 
   const normalizedResponseFormat = normalizeResponseFormat({
     responseFormat,
@@ -405,7 +464,7 @@ export async function invokeLLM(params: InvokeParams): Promise<InvokeResult> {
     method: "POST",
     headers: {
       "content-type": "application/json",
-      authorization: `Bearer ${ENV.forgeApiKey}`,
+      authorization: `Bearer ${config.apiKey}`,
     },
     body: JSON.stringify(payload),
   });
@@ -434,13 +493,10 @@ export type ModelsResponse = {
 
 export async function listLLMModels(): Promise<ModelsResponse> {
   assertApiKey();
+  const { baseUrl, apiKey } = getLLMConfig();
 
-  const url = ENV.forgeApiUrl && ENV.forgeApiUrl.trim().length > 0
-    ? `${ENV.forgeApiUrl.replace(/\/$/, "")}/v1/models`
-    : "https://forge.manus.im/v1/models";
-
-  const response = await fetchWithBackoff(url, {
-    headers: { authorization: `Bearer ${ENV.forgeApiKey}` },
+  const response = await fetchWithBackoff(`${baseUrl}/v1/models`, {
+    headers: { authorization: `Bearer ${apiKey}` },
   });
 
   if (!response.ok) {
