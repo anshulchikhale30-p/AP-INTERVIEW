@@ -273,6 +273,19 @@ export class AssemblyAiStream {
       socket.send(JSON.stringify({ type: "Terminate" }));
     });
 
+    // The server may acknowledge the Terminate without closing the socket, and
+    // teardown only drops our reference to it, so close it explicitly.
+    if (
+      socket.readyState === WebSocket.OPEN ||
+      socket.readyState === WebSocket.CONNECTING
+    ) {
+      try {
+        socket.close();
+      } catch {
+        /* already closing */
+      }
+    }
+
     this.teardown();
   }
 

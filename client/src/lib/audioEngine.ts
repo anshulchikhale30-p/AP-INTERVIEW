@@ -59,7 +59,7 @@ class PcmCaptureProcessor extends AudioWorkletProcessor {
 registerProcessor('pcm-capture', PcmCaptureProcessor);
 `;
 
-let workletLoaded = false;
+let workletUrl: string | null = null;
 
 /**
  * Create an AudioContext already running the PCM capture worklet. Requesting a
@@ -80,18 +80,13 @@ export async function createPcmCaptureContext(
 
   const context = new AudioContextCtor({ sampleRate: targetRate });
 
-  if (!workletLoaded) {
-    const blob = new Blob([PCM_WORKLET_SOURCE], {
-      type: "application/javascript",
-    });
-    const url = URL.createObjectURL(blob);
-    try {
-      await context.audioWorklet.addModule(url);
-    } finally {
-      URL.revokeObjectURL(url);
-    }
-    workletLoaded = true;
-  }
+  // `addModule` registers the processor on *this* AudioContext only, so it must
+  // run for every context. Each interview turn opens a fresh context, and a
+  // cached "already loaded" flag would leave later turns without the processor.
+  workletUrl ??= URL.createObjectURL(
+    new Blob([PCM_WORKLET_SOURCE], { type: "application/javascript" })
+  );
+  await context.audioWorklet.addModule(workletUrl);
 
   return context;
 }

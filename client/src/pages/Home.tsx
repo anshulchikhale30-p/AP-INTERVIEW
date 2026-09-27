@@ -245,6 +245,11 @@ export default function Home() {
   const startMutation = trpc.interview.start.useMutation();
   const answerMutation = trpc.interview.answer.useMutation();
   const streamTokenMutation = trpc.interview.streamToken.useMutation();
+  const voiceStatusQuery = trpc.interview.voiceStatus.useQuery(undefined, {
+    // Availability only changes when the server is redeployed.
+    staleTime: 5 * 60_000,
+    retry: false,
+  });
 
   const speakingRef = useRef(false);
   const respondingRef = useRef(false);
@@ -252,6 +257,12 @@ export default function Home() {
   const finalizingRef = useRef(false);
   const probedRef = useRef<Set<RubricDimensionId>>(new Set());
   const levelsRef = useRef<number[]>([]);
+  /**
+   * Mirrors the newest transcript snapshot. The ramble watchdog runs on an
+   * interval and must read current values without re-subscribing, otherwise
+   * every partial transcript would restart the timer and it would never fire.
+   */
+  const turnRef = useRef<MergedTurn | null>(null);
 
   const settingsRef = useRef<InterviewSettings>(DEFAULT_SETTINGS);
   const questionsRef = useRef<InterviewQuestion[]>([]);
@@ -279,6 +290,18 @@ export default function Home() {
   const [coaching, setCoaching] = useState<string | null>(null);
   const [voiceEnabled, setVoiceEnabled] = useState<boolean | null>(null);
   const [micDenied, setMicDenied] = useState<string | null>(null);
+
+  // Report real-time voice availability before the interview starts, so the
+  // setup screen can warn that only typed answers will work.
+  useEffect(() => {
+    if (voiceStatusQuery.isError) {
+      setVoiceEnabled(false);
+      return;
+    }
+    if (voiceStatusQuery.data) {
+      setVoiceEnabled(voiceStatusQuery.data.enabled);
+    }
+  }, [voiceStatusQuery.data, voiceStatusQuery.isError]);
 
   const [turn, setTurn] = useState<MergedTurn | null>(null);
 
@@ -309,10 +332,12 @@ export default function Home() {
   const voice = useVoiceStream({
     getToken,
     onPartial: snapshot => {
+      turnRef.current = snapshot;
       setTurn(snapshot);
       setMicDenied(null);
     },
     onTurnEnd: snapshot => {
+      turnRef.current = snapshot;
       setTurn(snapshot);
       void handleTurnEnd(snapshot);
     },
@@ -331,10 +356,23 @@ export default function Home() {
     },
   });
 
+  /**
+   * `useVoiceStream` returns a fresh object on every render, so effects must
+   * depend on the individual stable callbacks rather than the aggregate, or
+   * cleanup would tear down a live session on every state change.
+   */
+  const {
+    begin: beginVoice,
+    end: endVoice,
+    abort: abortVoice,
+    reset: resetVoice,
+    coverage: liveCoverage,
+  } = voice;
+
   const listening = voice.isListening;
   const coverage = useMemo(
-    () => turn?.coverage ?? voice.coverage,
-    [turn, voice.coverage]
+    () => turn?.coverage ?? liveCoverage,
+    [turn, liveCoverage]
   );
 
   const lastAssistantText = useCallback(() => {
@@ -379,13 +417,13 @@ export default function Home() {
     if (!startedRef.current || respondingRef.current) return;
     finalizingRef.current = false;
     setCoaching(null);
-    void voice.begin(lastAssistantText());
-  }, [lastAssistantText, voice]);
+    void beginVoice(lastAssistantText());
+  }, [lastAssistantText, beginVoice]);
 
   const completeInterview = useCallback(
     (closing: string, summaryResult: InterviewSummary) => {
       startedRef.current = false;
-      voice.abort();
+      abortVoice();
       setStarted(false);
       setMessages(current => [
         ...current,
@@ -395,7 +433,7 @@ export default function Home() {
       setPhase("summary");
       speak(closing);
     },
-    [speak, voice]
+    [speak, abortVoice]
   );
 
   const grade = useCallback(
@@ -464,7 +502,8 @@ export default function Home() {
         questionIndexRef.current = nextIndex;
         setQuestionIndex(nextIndex);
         setTurn(null);
-        voice.reset();
+        turnRef.current = null;
+        resetVoice();
 
         setMessages(current => [
           ...current,
@@ -493,7 +532,7 @@ export default function Home() {
         setResponding(false);
       }
     },
-    [answerMutation, completeInterview, openMic, speak, voice]
+    [answerMutation, completeInterview, openMic, resetVoice, speak]
   );
 
   /**
@@ -505,7 +544,7 @@ export default function Home() {
     async (snapshot: MergedTurn) => {
       if (respondingRef.current || finalizingRef.current) return;
       finalizingRef.current = true;
-      voice.abort();
+      abortVoice();
 
       const words = snapshot.metrics.wordCount;
       const spokenFor = snapshot.elapsedMs;
@@ -539,7 +578,7 @@ export default function Home() {
       probedRef.current.clear();
       await grade(snapshot.text, snapshot, false);
     },
-    [grade, openMic, speak, voice]
+    [grade, openMic, speak, abortVoice]
   );
 
   /**
@@ -553,7 +592,8 @@ export default function Home() {
     const timer = window.setInterval(() => {
       if (!startedRef.current || finalizingRef.current) return;
 
-      const snapshot = voice.turn;
+      const snapshot = turnRef.current;
+      if (!snapshot) return;
       if (snapshot.elapsedMs < RAMBLE_LIMIT_MS) return;
       if (snapshot.metrics.wordCount < 15) return;
 
@@ -568,7 +608,7 @@ export default function Home() {
 
       probedRef.current.add(target);
       finalizingRef.current = true;
-      voice.abort();
+      abortVoice();
       setCoaching("Interrupting to coach");
       speak(
         snapshot.elapsedMs > RAMBLE_LIMIT_MS * 1.8
@@ -579,7 +619,7 @@ export default function Home() {
     }, 500);
 
     return () => window.clearInterval(timer);
-  }, [listening, openMic, speak, voice]);
+  }, [listening, openMic, speak, abortVoice]);
 
   const startSession = useCallback(
     async (nextSettings: InterviewSettings) => {
@@ -597,30 +637,24 @@ export default function Home() {
         setTypeMode(false);
         setTyped("");
         setTurn(null);
+        turnRef.current = null;
         setCoaching(null);
-        voice.reset();
+        resetVoice();
         setPhase("interview");
         startedRef.current = true;
         setStarted(true);
-
-        // Probe whether real-time voice is available before promising it.
-        void streamTokenMutation
-          .mutateAsync({})
-          .then(token => setVoiceEnabled(token.enabled))
-          .catch(() => setVoiceEnabled(false));
 
         speak(result.intro, openMic);
       } catch {
         toast.error("Couldn't book the interviewer. Please try again.");
       }
     },
-    [openMic, speak, startMutation, streamTokenMutation, voice]
+    [openMic, resetVoice, speak, startMutation]
   );
-
   const stopSession = useCallback(() => {
     startedRef.current = false;
     finalizingRef.current = false;
-    voice.abort();
+    abortVoice();
     window.speechSynthesis?.cancel();
     speakingRef.current = false;
     setStarted(false);
@@ -628,7 +662,8 @@ export default function Home() {
     setResponding(false);
     setCoaching(null);
     setTurn(null);
-  }, [voice]);
+    turnRef.current = null;
+  }, [abortVoice]);
 
   const toggleListening = () => {
     if (!startedRef.current || respondingRef.current) return;
@@ -639,7 +674,7 @@ export default function Home() {
     }
     if (listening) {
       finalizingRef.current = true;
-      void voice.end().then(snapshot => {
+      void endVoice().then(snapshot => {
         finalizingRef.current = false;
         void handleTurnEnd(snapshot);
       });
@@ -651,9 +686,10 @@ export default function Home() {
   const skipQuestion = () => {
     if (!startedRef.current || respondingRef.current) return;
     finalizingRef.current = true;
-    voice.abort();
+    abortVoice();
     setTurn(null);
-    voice.reset();
+    turnRef.current = null;
+    resetVoice();
     void grade("", null, true);
   };
 
@@ -663,12 +699,14 @@ export default function Home() {
     setTyped("");
     setTypeMode(false);
     finalizingRef.current = true;
-    voice.abort();
+    abortVoice();
     setTurn(null);
-    voice.reset();
+    turnRef.current = null;
+    resetVoice();
     void grade(trimmed, null, false);
   };
 
+  // `stopSession` is stable, so this only runs when Home actually unmounts.
   useEffect(() => () => stopSession(), [stopSession]);
 
   const currentQuestion = questions[questionIndex];

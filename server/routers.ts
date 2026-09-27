@@ -283,6 +283,14 @@ export const appRouter = router({
           };
         }
       }),
+    /**
+     * Cheap readiness probe for the setup screen. Deliberately does not mint a
+     * streaming token, so checking availability never burns a single-use token.
+     */
+    voiceStatus: publicProcedure.query(() => ({
+      ...getStreamingConfig(),
+      enabled: hasAssemblyAi(),
+    })),
     start: publicProcedure
       .input(
         z.object({

@@ -1,0 +1,32 @@
+# Render blueprint for intervue.
+# The app is a single Node service: it serves the built client and hosts the
+# tRPC endpoints that mint AssemblyAI streaming tokens and grade answers.
+services:
+  - type: web
+    name: intervue
+    runtime: node
+    plan: free
+    buildCommand: pnpm install --frozen-lockfile && pnpm run build
+    startCommand: pnpm run start
+    healthCheckPath: /
+    envVars:
+      - key: NODE_VERSION
+        value: "22"
+      - key: NODE_ENV
+        value: production
+      # Required: enables the real-time voice agent.
+      - key: ASSEMBLYAI_API_KEY
+        sync: false
+      # Optional: LLM grading. Without it the app falls back to the built-in
+      # heuristic grader, so the voice demo still works.
+      - key: NVIDIA_API_KEY
+        sync: false
+      - key: LLM_API_URL
+        sync: false
+      - key: LLM_API_KEY
+        sync: false
+      - key: LLM_MODEL
+        sync: false
+      # Optional: MySQL. Omit to run fully in memory.
+      - key: DATABASE_URL
+        sync: false
