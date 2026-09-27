@@ -13,4 +13,8 @@ export const ENV = {
   llmModel: process.env.LLM_MODEL ?? "",
   // NVIDIA build API (nvapi-... key). Auto-detected when the key is present.
   nvidiaApiKey: process.env.NVIDIA_API_KEY ?? "",
+  // AssemblyAI — powers the real-time voice agent via Universal-Streaming v3.
+  assemblyAiKey: process.env.ASSEMBLYAI_API_KEY ?? "",
 };
+
+export const hasAssemblyAi = () => ENV.assemblyAiKey.trim().length > 0;

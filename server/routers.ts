@@ -8,6 +8,11 @@ import type {
 } from "@shared/types";
 import type { JsonSchema } from "./_core/llm";
 import { getSessionCookieOptions } from "./_core/cookies";
+import {
+  createStreamingToken,
+  getStreamingConfig,
+} from "./_core/assemblyai";
+import { hasAssemblyAi } from "./_core/env";
 import { invokeLLM } from "./_core/llm";
 import { systemRouter } from "./_core/systemRouter";
 import { publicProcedure, router } from "./_core/trpc";
@@ -161,6 +166,42 @@ export const appRouter = router({
     }),
   }),
   interview: router({
+    streamToken: publicProcedure
+      .input(
+        z
+          .object({
+            maxSessionDurationSeconds: z.number().int().min(60).max(10_800).optional(),
+          })
+          .default({})
+      )
+      .mutation(async ({ input }) => {
+        if (!hasAssemblyAi()) {
+          return {
+            enabled: false as const,
+            reason:
+              "ASSEMBLYAI_API_KEY is not configured on the server. Set it to enable real-time voice.",
+          };
+        }
+        try {
+          const { token, expiresInSeconds } = await createStreamingToken({
+            maxSessionDurationSeconds: input.maxSessionDurationSeconds,
+          });
+          return {
+            token,
+            expiresInSeconds,
+            ...getStreamingConfig(),
+            enabled: true as const,
+          };
+        } catch (error) {
+          return {
+            enabled: false as const,
+            reason:
+              error instanceof Error
+                ? error.message
+                : "Could not reach AssemblyAI.",
+          };
+        }
+      }),
     start: publicProcedure
       .input(
         z.object({
