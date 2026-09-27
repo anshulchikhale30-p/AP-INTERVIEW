@@ -1,0 +1,384 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>intervue — AssemblyAI Voice Agent Hackathon</title>
+<style>
+  @page { size: 1280px 720px; margin: 0; }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --bg: #0b111d;
+    --card: #111a29;
+    --fg: #f7f8f2;
+    --lime: #d8f97a;
+    --blue: #82a9ff;
+    --coral: #ff8f70;
+    --purple: #c5a7ff;
+    --green: #57d6a7;
+    --muted: rgba(247, 248, 242, 0.55);
+    --faint: rgba(247, 248, 242, 0.32);
+  }
+  body {
+    background: #000;
+    font-family: "Inter", "Segoe UI", -apple-system, BlinkMacSystemFont, sans-serif;
+    color: var(--fg);
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+  .slide {
+    width: 1280px;
+    height: 720px;
+    padding: 60px 72px;
+    background: var(--bg);
+    position: relative;
+    overflow: hidden;
+    page-break-after: always;
+    break-after: page;
+    display: flex;
+    flex-direction: column;
+  }
+  .slide:last-child { page-break-after: auto; break-after: auto; }
+  .grain {
+    position: absolute; inset: 0;
+    background:
+      radial-gradient(900px 520px at 82% -12%, rgba(216, 249, 122, 0.13), transparent 62%),
+      radial-gradient(760px 460px at 8% 108%, rgba(130, 169, 255, 0.11), transparent 60%);
+    pointer-events: none;
+  }
+  .content { position: relative; z-index: 1; display: flex; flex-direction: column; height: 100%; }
+
+  .kicker {
+    font-size: 14px; letter-spacing: 0.19em; text-transform: uppercase;
+    color: var(--lime); font-weight: 700; margin-bottom: 18px;
+  }
+  h1 { font-size: 66px; line-height: 1.04; letter-spacing: -0.028em; font-weight: 800; }
+  h2 { font-size: 44px; line-height: 1.1; letter-spacing: -0.022em; font-weight: 800; }
+  h3 { font-size: 20px; font-weight: 700; margin-bottom: 8px; }
+  p { font-size: 19px; line-height: 1.55; color: var(--muted); }
+  .lead { font-size: 22px; line-height: 1.5; color: var(--muted); max-width: 900px; }
+  .grow { flex: 1; display: flex; flex-direction: column; justify-content: center; }
+
+  .foot {
+    position: absolute; left: 72px; right: 72px; bottom: 30px;
+    display: flex; justify-content: space-between; align-items: center;
+    font-size: 12.5px; color: var(--faint); letter-spacing: 0.06em; z-index: 1;
+  }
+  .foot .dot { color: var(--lime); }
+
+  /* title slide */
+  .title-logo { display: flex; align-items: center; gap: 14px; margin-bottom: 30px; }
+  .title-logo span { font-size: 30px; font-weight: 800; letter-spacing: -0.02em; }
+  .orb {
+    width: 40px; height: 40px; border-radius: 999px;
+    background: radial-gradient(circle at 35% 30%, var(--lime), #6f8f2a 70%, #2b3a12);
+    box-shadow: 0 0 46px rgba(216, 249, 122, 0.45);
+  }
+  .tag {
+    display: inline-block; margin-top: 28px; padding: 9px 17px;
+    border: 1px solid rgba(216, 249, 122, 0.34); border-radius: 999px;
+    color: var(--lime); font-size: 14.5px; font-weight: 600; background: rgba(216, 249, 122, 0.07);
+  }
+
+  /* grids */
+  .cols { display: grid; gap: 18px; }
+  .c2 { grid-template-columns: 1fr 1fr; }
+  .c3 { grid-template-columns: repeat(3, 1fr); }
+  .c4 { grid-template-columns: repeat(4, 1fr); }
+  .card {
+    background: var(--card); border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 15px; padding: 20px 21px;
+  }
+  .card p { font-size: 15.5px; line-height: 1.5; }
+  .card .num { font-size: 13px; font-weight: 800; letter-spacing: 0.14em; margin-bottom: 11px; }
+  .n-lime .num { color: var(--lime); }
+  .n-blue .num { color: var(--blue); }
+  .n-coral .num { color: var(--coral); }
+  .n-purple .num { color: var(--purple); }
+
+  ul.ticks { list-style: none; }
+  ul.ticks li {
+    position: relative; padding-left: 30px; margin-bottom: 15px;
+    font-size: 18.5px; line-height: 1.48; color: var(--muted);
+  }
+  ul.ticks li::before {
+    content: ""; position: absolute; left: 0; top: 9px;
+    width: 10px; height: 10px; border-radius: 3px; background: var(--lime);
+  }
+  ul.ticks.blue li::before { background: var(--blue); }
+  ul.ticks.coral li::before { background: var(--coral); }
+  ul.ticks li b { color: var(--fg); font-weight: 700; }
+
+  code, .mono {
+    font-family: "SF Mono", "Cascadia Code", Consolas, "Courier New", monospace;
+    font-size: 14.5px;
+  }
+  .pill {
+    display: inline-block; padding: 4px 11px; border-radius: 7px;
+    background: rgba(130, 169, 255, 0.14); color: var(--blue);
+    border: 1px solid rgba(130, 169, 255, 0.26); font-size: 13px;
+    font-family: "SF Mono", Consolas, monospace; margin: 0 4px 4px 0;
+  }
+  .pill.lime { background: rgba(216,249,122,0.13); color: var(--lime); border-color: rgba(216,249,122,0.28); }
+
+  /* rubric meter mock */
+  .meter { display: flex; flex-direction: column; gap: 11px; }
+  .meter-row { display: grid; grid-template-columns: 190px 1fr 44px; align-items: center; gap: 13px; }
+  .meter-row .lbl { font-size: 14.5px; color: var(--muted); }
+  .track { height: 9px; border-radius: 999px; background: rgba(255,255,255,0.09); overflow: hidden; }
+  .fill { height: 100%; border-radius: 999px; }
+  .meter-row .val { font-size: 13px; color: var(--faint); text-align: right; }
+
+  /* architecture */
+  .flow { display: flex; align-items: stretch; gap: 0; margin-top: 8px; }
+  .node {
+    background: var(--card); border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 14px; padding: 17px 18px; flex: 1;
+  }
+  .node h3 { font-size: 16.5px; margin-bottom: 7px; }
+  .node p { font-size: 13.5px; line-height: 1.45; }
+  .link {
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    padding: 0 13px; width: 132px; flex: none;
+  }
+  .arrow { color: var(--lime); font-size: 20px; line-height: 1; }
+  .link span.lbl { font-size: 11px; color: var(--faint); text-align: center; margin-top: 6px; line-height: 1.35; }
+
+  table { width: 100%; border-collapse: collapse; }
+  th {
+    text-align: left; font-size: 12.5px; text-transform: uppercase; letter-spacing: 0.13em;
+    color: var(--faint); font-weight: 700; padding: 0 14px 11px 0; border-bottom: 1px solid rgba(255,255,255,0.11);
+  }
+  td { font-size: 15.5px; color: var(--muted); padding: 11px 14px 11px 0; border-bottom: 1px solid rgba(255,255,255,0.055); }
+  td.k { color: var(--fg); font-weight: 600; }
+  td code { color: var(--lime); font-size: 13.5px; }
+
+  .note { font-size: 13.5px; color: var(--faint); line-height: 1.5; }
+  .accent { color: var(--lime); }
+  .accent-blue { color: var(--blue); }
+</style>
+</head>
+<body>
+
+<!-- 1. TITLE -->
+<section class="slide">
+  <div class="grain"></div>
+  <div class="content">
+    <div class="title-logo"><div class="orb"></div><span>intervue</span></div>
+    <div class="grow">
+      <h1>The voice agent that runs<br />a real technical interview —<br />and coaches you <span class="accent">while</span> you talk.</h1>
+      <div class="tag">Built on AssemblyAI Universal-Streaming</div>
+    </div>
+  </div>
+  <div class="foot"><span>AssemblyAI Voice Agent Hackathon</span><span class="dot">01</span></div>
+</section>
+
+<!-- 2. PROBLEM -->
+<section class="slide">
+  <div class="grain"></div>
+  <div class="content">
+    <div class="kicker">The problem</div>
+    <h2 style="margin-bottom: 34px;">Everyone trains for the interview.<br />Almost nobody trains for <span class="accent">explaining</span> the answer.</h2>
+    <div class="cols c3" style="margin-top: 4px;">
+      <div class="card n-blue">
+        <div class="num">01</div>
+        <h3>LeetCode grades code</h3>
+        <p>It optimises the one part of an interview you are already good at, and is silent on the part that actually fails people.</p>
+      </div>
+      <div class="card n-coral">
+        <div class="num">02</div>
+        <h3>Feedback arrives too late</h3>
+        <p>"Clearer communication" lands in a rejection email weeks later, with no idea which sentence cost you the offer.</p>
+      </div>
+      <div class="card n-purple">
+        <div class="num">03</div>
+        <h3>Mock interviews don't scale</h3>
+        <p>A human interviewer cannot listen for structure, complexity and filler words at the same time. So they don't.</p>
+      </div>
+    </div>
+  </div>
+  <div class="foot"><span>intervue</span><span class="dot">02</span></div>
+</section>
+
+<!-- 3. THE INSIGHT -->
+<section class="slide">
+  <div class="grain"></div>
+  <div class="content">
+    <div class="kicker">The insight</div>
+    <h2 style="margin-bottom: 12px; max-width: 1000px;">A strong answer has a <span class="accent">shape</span> — and you can score it live, mid-sentence.</h2>
+    <p class="lead" style="margin-bottom: 30px;">Every credible algorithmic explanation covers the same five steps. Once you name them, you can watch a transcript fill in as it happens — and tell the speaker, in real time, which step they skipped.</p>
+    <div class="cols c4">
+      <div class="card n-lime"><div class="num">01</div><h3>Restate</h3><p>Confirm the actual task in your own words.</p></div>
+      <div class="card n-blue"><div class="num">02</div><h3>Approach</h3><p>Commit to a direction before exploring it.</p></div>
+      <div class="card n-purple"><div class="num">03</div><h3>Data structure</h3><p>Name the structure and why it fits.</p></div>
+      <div class="card n-coral"><div class="num">04</div><h3>Complexity</h3><p>Time <em>and</em> space, in big O.</p></div>
+      <div class="card n-lime" style="grid-column: 2 / span 2;"><div class="num">05</div><h3>Edge cases</h3><p>Empty input, duplicates, the boundaries.</p></div>
+    </div>
+  </div>
+  <div class="foot"><span>intervue</span><span class="dot">03</span></div>
+</section>
+
+<!-- 4. THE PRODUCT / LIVE METER -->
+<section class="slide">
+  <div class="grain"></div>
+  <div class="content">
+    <div class="kicker">What it does</div>
+    <h2 style="margin-bottom: 30px;">You talk. The rubric fills in.</h2>
+    <div class="cols c2" style="gap: 30px; align-items: center;">
+      <div>
+        <ul class="ticks">
+          <li><b>Asks the question out loud</b> and opens the mic without a click.</li>
+          <li><b>Scores the live transcript</b> against the five steps, from partial results.</li>
+          <li><b>Interrupts a ramble</b> when you talk past the limit without analysing anything.</li>
+          <li><b>Probes instead of grading</b> when an answer is too thin to score.</li>
+        </ul>
+      </div>
+      <div class="card" style="padding: 26px 28px;">
+        <div class="kicker" style="margin-bottom: 20px; font-size: 12px;">Answer meter — live</div>
+        <div class="meter">
+          <div class="meter-row"><span class="lbl">Restate</span><span class="track"><span class="fill" style="width:100%;background:var(--lime)"></span></span><span class="val">hit</span></div>
+          <div class="meter-row"><span class="lbl">Approach</span><span class="track"><span class="fill" style="width:100%;background:var(--lime)"></span></span><span class="val">hit</span></div>
+          <div class="meter-row"><span class="lbl">Data structure</span><span class="track"><span class="fill" style="width:100%;background:var(--lime)"></span></span><span class="val">hit</span></div>
+          <div class="meter-row"><span class="lbl">Complexity</span><span class="track"><span class="fill" style="width:46%;background:var(--blue)"></span></span><span class="val">…</span></div>
+          <div class="meter-row"><span class="lbl">Edge cases</span><span class="track"><span class="fill" style="width:8%;background:rgba(255,255,255,0.14)"></span></span><span class="val">—</span></div>
+        </div>
+        <p class="note" style="margin-top: 22px;">Complexity is half-credited and edge cases are untouched. The interviewer is about to ask for exactly that.</p>
+      </div>
+    </div>
+  </div>
+  <div class="foot"><span>intervue</span><span class="dot">04</span></div>
+</section>
+
+<!-- 5. ARCHITECTURE -->
+<section class="slide">
+  <div class="grain"></div>
+  <div class="content">
+    <div class="kicker">Architecture</div>
+    <h2 style="margin-bottom: 26px;">Audio goes straight to AssemblyAI. The server never touches it.</h2>
+    <div class="flow">
+      <div class="node">
+        <h3>Browser</h3>
+        <p>AudioWorklet converts mic float samples to PCM16 @ 16 kHz, 100 ms frames, and reads RMS for the live waveform.</p>
+      </div>
+      <div class="link"><div class="arrow">→</div><span class="lbl">WebSocket<br />raw PCM</span></div>
+      <div class="node" style="border-color:rgba(216,249,122,0.32);">
+        <h3 style="color:var(--lime)">AssemblyAI</h3>
+        <p>Universal-Streaming <code>universal-3-6-pro</code>. Partial turns, final turns, word timestamps, end-of-turn detection.</p>
+      </div>
+      <div class="link"><div class="arrow">←</div><span class="lbl">transcript<br />+ timings</span></div>
+      <div class="node">
+        <h3>Server</h3>
+        <p>tRPC only: mints single-use streaming tokens and grades answers. No audio is proxied, buffered or stored.</p>
+      </div>
+    </div>
+    <div class="cols c2" style="margin-top: 28px; gap: 22px;">
+      <div class="card n-lime">
+        <h3>One process, no media server</h3>
+        <p>Express serves the built client and answers two tRPC calls. Deployable anywhere Node runs.</p>
+      </div>
+      <div class="card n-blue">
+        <h3>The account key never ships</h3>
+        <p>The browser requests a 60-second, single-use token per turn. The key stays server-side.</p>
+      </div>
+    </div>
+  </div>
+  <div class="foot"><span>intervue</span><span class="dot">05</span></div>
+</section>
+
+<!-- 6. ASSEMBLYAI USAGE -->
+<section class="slide">
+  <div class="grain"></div>
+  <div class="content">
+    <div class="kicker">AssemblyAI integration</div>
+    <h2 style="margin-bottom: 24px;">Features that made the coaching possible</h2>
+    <table>
+      <thead><tr><th style="width:30%">Feature</th><th style="width:36%">Why the product needs it</th><th>Where</th></tr></thead>
+      <tbody>
+        <tr><td class="k">Universal-Streaming</td><td>Sub-second partial transcripts, so the rubric can update mid-sentence</td><td><code>assemblyaiStream.ts</code></td></tr>
+        <tr><td class="k">End-of-turn detection</td><td>The server decides when the candidate stopped talking — no silence timers, no clipped answers</td><td><code>assemblyaiStream.ts</code></td></tr>
+        <tr><td class="k">Temporary tokens</td><td>Single-use per turn, so the account key is never exposed to the browser</td><td><code>_core/assemblyai.ts</code></td></tr>
+        <tr><td class="k">Word-level timestamps</td><td>Real WPM, longest pause and filler rate rather than a guess</td><td><code>shared/rubric.ts</code></td></tr>
+        <tr><td class="k">Keyterms per question</td><td>Forces "Big O", "two pointers" and "hash map" to transcribe correctly</td><td><code>questionBank.ts</code></td></tr>
+        <tr><td class="k">Agent context</td><td>Biases the model toward interview vocabulary and spoken notation</td><td><code>assemblyaiStream.ts</code></td></tr>
+        <tr><td class="k">Inactivity timeout</td><td>Bounds a stalled turn instead of billing an open socket forever</td><td><code>assemblyaiStream.ts</code></td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="foot"><span>intervue</span><span class="dot">06</span></div>
+</section>
+
+<!-- 7. ENGINEERING -->
+<section class="slide">
+  <div class="grain"></div>
+  <div class="content">
+    <div class="kicker">Engineering</div>
+    <h2 style="margin-bottom: 26px;">Three bugs that would have killed a live demo</h2>
+    <div class="cols c3">
+      <div class="card n-coral">
+        <div class="num">BUG 01</div>
+        <h3>The cleanup that killed every session</h3>
+        <p>The voice hook returned a new object each render, so the unmount effect re-ran constantly and tore down the live microphone. Effects now depend on stable callbacks.</p>
+      </div>
+      <div class="card n-coral">
+        <div class="num">BUG 02</div>
+        <h3>Turn two onward had no audio</h3>
+        <p>AudioWorklet registration is per AudioContext, not global. Our "already loaded" cache meant only the first interview turn could capture audio.</p>
+      </div>
+      <div class="card n-coral">
+        <div class="num">BUG 03</div>
+        <h3>A watchdog that could never fire</h3>
+        <p>The ramble timer depended on the transcript, so each new word restarted it. It now reads a ref, and interrupts long unstructured answers as designed.</p>
+      </div>
+    </div>
+    <p class="note" style="margin-top: 24px;">Found by running the shipped AudioWorklet source against a stubbed Web Audio global in the test suite — 26 tests covering the rubric, delivery maths and audio resampling.</p>
+  </div>
+  <div class="foot"><span>intervue</span><span class="dot">07</span></div>
+</section>
+
+<!-- 8. IMPACT -->
+<section class="slide">
+  <div class="grain"></div>
+  <div class="content">
+    <div class="kicker">Impact</div>
+    <h2 style="margin-bottom: 26px;">Honest about what it is</h2>
+    <div class="cols c2" style="gap: 30px;">
+      <div>
+        <ul class="ticks">
+          <li><b>Coaching at the moment of the mistake</b> is the entire product. Feedback after the fact is what candidates already have.</li>
+          <li><b>Works without a microphone.</b> Skip and typed-answer paths mean the grading engine is never gated on speech.</li>
+          <li><b>Degrades honestly.</b> No LLM key falls back to a heuristic grader instead of pretending.</li>
+        </ul>
+      </div>
+      <div>
+        <ul class="ticks blue">
+          <li><b>No audio is stored.</b> Transcripts live in memory for the length of the session.</li>
+          <li><b>It's practice, and it says so.</b> The interviewer never claims to be a recruiter or promises an outcome.</li>
+          <li><b>Next:</b> two-way voice, resume-anchored questions, and a rubric that adapts to your role.</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+  <div class="foot"><span>intervue</span><span class="dot">08</span></div>
+</section>
+
+<!-- 9. CLOSE -->
+<section class="slide">
+  <div class="grain"></div>
+  <div class="content">
+    <div class="grow" style="align-items: flex-start;">
+      <div class="title-logo"><div class="orb"></div><span>intervue</span></div>
+      <h1 style="font-size: 58px;">Stop practising the code.<br />Practise the <span class="accent">answer</span>.</h1>
+      <p class="lead" style="margin-top: 26px;">Live demo, source and the AssemblyAI integration are in the repository.</p>
+      <div style="margin-top: 30px;">
+        <span class="pill lime">React + TypeScript</span>
+        <span class="pill">AssemblyAI Universal-Streaming</span>
+        <span class="pill">tRPC</span>
+        <span class="pill">AudioWorklet</span>
+        <span class="pill">26 tests passing</span>
+      </div>
+    </div>
+  </div>
+  <div class="foot"><span>AssemblyAI Voice Agent Hackathon</span><span class="dot">09</span></div>
+</section>
+
+</body>
+</html>

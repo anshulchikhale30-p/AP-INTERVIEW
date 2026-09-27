@@ -1,0 +1,107 @@
+<!doctype html>
+<html><head><meta charset="utf-8" /><title>audit</title></head>
+<body>
+<script>
+window.addEventListener("load", () => {
+  const out = [];
+  const push = (k, v) => out.push(k + ": " + v);
+
+  const de = document.documentElement;
+  push("document scrollWidth", de.scrollWidth);
+  push("document scrollHeight", de.scrollHeight);
+
+  const report = (sel) => {
+    document.querySelectorAll(sel).forEach((el, i) => {
+      const r = el.getBoundingClientRect();
+      if (r.width === 0 && r.height === 0) return;
+      const label = sel + "[" + i + "]";
+      push(label + " box", "x=" + Math.round(r.left) + " y=" + Math.round(r.top) +
+        " w=" + Math.round(r.width) + " h=" + Math.round(r.height) +
+        " right=" + Math.round(r.right) + " bottom=" + Math.round(r.bottom));
+    });
+  };
+
+  report("h1"); report("p.sub"); report(".pills b"); report(".logo span");
+  report(".foot span"); report(".orb");
+
+  // Does anything overflow the 1600x900 frame?
+  const over = [];
+  document.querySelectorAll("*").forEach((el) => {
+    const r = el.getBoundingClientRect();
+    if (r.width === 0) return;
+    if (r.right > 1600.5 || r.bottom > 900.5 || r.left < -0.5 || r.top < -0.5) {
+      over.push(el.tagName + "." + (el.className || "") + " -> right=" +
+        Math.round(r.right) + " bottom=" + Math.round(r.bottom));
+    }
+  });
+  push("OVERFLOWING ELEMENTS", over.length === 0 ? "none" : over.join(" | "));
+
+  // Does the headline collide with the orb?
+  const orb = document.querySelector(".orb");
+  const h1 = document.querySelector("h1");
+  if (orb && h1) {
+    const o = orb.getBoundingClientRect();
+    const t = h1.getBoundingClientRect();
+    const hit = !(o.left > t.right || o.right < t.left || o.top > t.bottom || o.bottom < t.top);
+    push("H1 x ORB overlap", hit ? "COLLISION" : "clear");
+    push("h1 right edge vs orb left", Math.round(t.right) + " vs " + Math.round(o.left));
+  }
+
+  // Count rendered text lines: an extra line means a <br> line wrapped.
+  if (h1) {
+    const range = document.createRange();
+    range.selectNodeContents(h1);
+    push("h1 rendered lines", range.getClientRects().length);
+  }
+  const sub = document.querySelector("p.sub");
+  if (sub) {
+    const range = document.createRange();
+    range.selectNodeContents(sub);
+    push("sub rendered lines", range.getClientRects().length);
+  }
+
+  // Pairwise overlap between every visible text block and the orb / footer.
+  const texts = Array.from(document.querySelectorAll("h1, p.sub, .pills b, .logo span, .foot span"));
+  const boxes = [
+    ["ORB", document.querySelector(".orb")],
+    ["FOOTER", document.querySelector(".foot")]
+  ];
+  texts.forEach((el) => {
+    const r = el.getBoundingClientRect();
+    boxes.forEach(([name, box]) => {
+      if (!box) return;
+      const b = box.getBoundingClientRect();
+      const hit = !(r.left > b.right || r.right < b.left || r.top > b.bottom || r.bottom < b.top);
+      if (hit) {
+        push("OVERLAP", el.tagName + "." + (el.className || "(none)") + " x " + name);
+      }
+    });
+  });
+  push("text/decor overlap scan", "done");
+
+  // Does the headline run into the footer?
+  const foot = document.querySelector(".foot");
+  if (foot && h1) {
+    push("h1 bottom vs foot top", Math.round(h1.getBoundingClientRect().bottom) +
+      " vs " + Math.round(foot.getBoundingClientRect().top));
+  }
+
+  // Waveform sanity
+  const bars = document.querySelectorAll(".wave i");
+  push("waveform bars", bars.length);
+  let maxH = 0, nonZero = 0;
+  bars.forEach(b => {
+    const h = parseFloat(b.style.height);
+    if (h > maxH) maxH = h;
+    if (h > 20) nonZero += 1;
+  });
+  push("waveform tallest bar", maxH);
+  push("waveform bars over 20px", nonZero);
+
+  const pre = document.createElement("pre");
+  pre.id = "AUDIT";
+  pre.textContent = out.join("\n");
+  document.body.appendChild(pre);
+});
+</script>
+</body></html>

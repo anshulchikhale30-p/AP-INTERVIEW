@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { width: 1600px; height: 900px; overflow: hidden; }
+  .cover {
+    width: 1600px; height: 900px; position: relative; overflow: hidden;
+    background: #0b111d; color: #f7f8f2;
+    font-family: "Segoe UI", -apple-system, BlinkMacSystemFont, sans-serif;
+    display: flex; flex-direction: column; padding: 104px 112px;
+  }
+  /* ambient light */
+  .a { position: absolute; border-radius: 999px; filter: blur(90px); }
+  .a1 { width: 820px; height: 820px; right: -180px; top: -260px;
+        background: radial-gradient(circle, rgba(216,249,122,0.26), transparent 66%); }
+  .a2 { width: 720px; height: 720px; left: -220px; bottom: -300px;
+        background: radial-gradient(circle, rgba(130,169,255,0.22), transparent 66%); }
+  .a3 { width: 460px; height: 460px; right: 300px; bottom: -200px;
+        background: radial-gradient(circle, rgba(255,143,112,0.13), transparent 68%); }
+  /* waveform */
+  .wave { position: absolute; left: 0; right: 0; bottom: 0; height: 300px;
+          display: flex; align-items: flex-end; gap: 7px; padding: 0 112px 0 112px; opacity: 0.5; }
+  .wave i { display: block; flex: 1; border-radius: 5px 5px 0 0;
+            background: linear-gradient(to top, rgba(216,249,122,0.05), rgba(216,249,122,0.30)); }
+  /* orb */
+  .orb {
+    position: absolute; right: 140px; top: 196px;
+    width: 262px; height: 262px; border-radius: 999px;
+    background: radial-gradient(circle at 34% 30%, #eaffb0, #d8f97a 26%, #8fb03a 58%, #35461a 100%);
+    box-shadow: 0 0 120px rgba(216,249,122,0.34), inset 0 0 70px rgba(0,0,0,0.35);
+  }
+  .rings { position: absolute; right: 46px; top: 92px; width: 450px; height: 450px; }
+  .rings span { position: absolute; inset: 0; border-radius: 999px;
+                border: 1px solid rgba(216,249,122,0.16); }
+  .rings span:nth-child(2) { inset: 62px; border-color: rgba(216,249,122,0.11); }
+  .rings span:nth-child(3) { inset: 124px; border-color: rgba(216,249,122,0.07); }
+
+  .logo { position: relative; display: flex; align-items: center; gap: 18px; }
+  .logo .dot { width: 26px; height: 26px; border-radius: 999px;
+               background: #d8f97a; box-shadow: 0 0 26px rgba(216,249,122,0.6); }
+  .logo span { font-size: 38px; font-weight: 800; letter-spacing: -0.02em; }
+
+  .body { position: absolute; left: 112px; top: 268px; width: 1040px; }
+  h1 { font-size: 74px; line-height: 1.06; letter-spacing: -0.032em; font-weight: 800; }
+  h1 em { font-style: normal; color: #d8f97a; }
+  p.sub { margin-top: 26px; font-size: 25px; line-height: 1.42; color: rgba(247,248,242,0.62); }
+
+  .pills { position: relative; display: flex; gap: 12px; margin-top: 34px; flex-wrap: wrap; }
+  .pills b { font-weight: 600; font-size: 18px; padding: 11px 21px; border-radius: 999px;
+             background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.13);
+             color: rgba(247,248,242,0.78); }
+  .pills b.hi { background: rgba(216,249,122,0.12); border-color: rgba(216,249,122,0.36); color: #d8f97a; }
+
+  .foot { position: absolute; left: 112px; right: 112px; bottom: 54px;
+          display: flex; justify-content: space-between; align-items: center;
+          font-size: 21px; color: rgba(247,248,242,0.36); letter-spacing: 0.05em; }
+  .foot .k { color: rgba(216,249,122,0.75); font-weight: 600; }
+</style>
+</head>
+<body>
+  <div class="cover">
+    <div class="a a1"></div><div class="a a2"></div><div class="a a3"></div>
+
+    <div class="rings"><span></span><span></span><span></span></div>
+    <div class="orb"></div>
+
+    <div class="wave" id="wave"></div>
+
+    <div class="logo"><div class="dot"></div><span>intervue</span></div>
+
+    <div class="body">
+      <h1>A voice agent that runs a<br />real technical interview,<br />and coaches you<br /><em>while</em> you talk.</h1>
+      <p class="sub">It listens to your spoken answer, scores it against a five-step rubric in real time, and interrupts when your argument wanders.</p>
+      <div class="pills">
+        <b class="hi">Built on AssemblyAI Universal-Streaming</b>
+        <b>Live rubric</b>
+        <b>Delivery analytics</b>
+        <b>No code editor</b>
+      </div>
+    </div>
+
+    <div class="foot">
+      <span class="k">AssemblyAI Voice Agent Hackathon</span>
+      <span>Sub-second transcription · End-of-turn detection · Single-use tokens</span>
+    </div>
+  </div>
+
+  <script>
+    // Deterministic speech-like envelope: bursts with natural pauses.
+    const wave = document.getElementById("wave");
+    const bars = 104;
+    let seed = 7;
+    const rand = () => (seed = (seed * 1103515245 + 12345) % 2147483648) / 2147483648;
+    for (let i = 0; i < bars; i += 1) {
+      const t = i / bars;
+      // three "sentences" separated by near-silence
+      const phrase = Math.sin(t * Math.PI * 3.0);
+      const gate = phrase > -0.15 ? 1 : 0.06;
+      const envelope = 0.35 + 0.65 * Math.abs(Math.sin(t * Math.PI * 7.5));
+      const h = Math.max(5, (14 + 196 * gate * envelope * (0.55 + 0.45 * rand())));
+      const bar = document.createElement("i");
+      bar.style.height = h.toFixed(0) + "px";
+      bar.style.opacity = (0.30 + 0.55 * gate).toFixed(2);
+      wave.appendChild(bar);
+    }
+  </script>
+</body>
+</html>
